@@ -156,24 +156,6 @@ class CalcJobNode(CalculationNode):
 
         return builder
 
-    @property
-    def _raw_input_folder(self) -> Folder:
-        """
-        Get the input folder object.
-
-        :return: the input folder object.
-        :raise: NotExistent: if the raw folder hasn't been created yet
-        """
-        from aiida.common.exceptions import NotExistent
-
-        assert self._repository is not None, 'repository not initialised'
-
-        return_folder = self._repository._get_base_folder()  # pylint: disable=protected-access
-        if return_folder.exists():
-            return return_folder
-
-        raise NotExistent('the `_raw_input_folder` has not yet been created')
-
     def get_option(self, name: str) -> Optional[Any]:
         """
         Retun the value of an option that was set for this CalcJobNode
