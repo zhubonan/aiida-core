@@ -249,7 +249,12 @@ def get_node_repository_dirpaths(basepath, shard=None):
                 path = None
 
                 if 'path' in subdirs and 'raw_input' in subdirs:
-                    contains_both.append(str(dirpath))
+                    # If the `path` is empty, we simply ignore and set `raw_input` to be migrated, otherwise we add
+                    # the entry to `contains_both` which will cause the migration to fail.
+                    if os.listdir(dirpath / 'path'):
+                        contains_both.append(str(dirpath))
+                    else:
+                        path = dirpath / 'raw_input'
                 elif 'path' in subdirs:
                     path = dirpath / 'path'
                 elif 'raw_input' in subdirs:
