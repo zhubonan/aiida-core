@@ -121,6 +121,72 @@ def calcjob_inputcat(calcjob, path):
             echo.echo_critical(f'Could not open output path "{path}". Exception: {exception}')
 
 
+@verdi_calcjob.command('remotecat')
+@arguments.CALCULATION('calcjob', type=CalculationParamType(sub_classes=('aiida.node:process.calculation.calcjob',)))
+@click.argument('path', type=click.STRING, required=False)
+@click.option('--save-to', '-s', help='Name of the file to save the remote content to.')
+@decorators.with_dbenv()
+def calcjob_remotecat(calcjob, path, save_to):
+    """
+    Show the contents of one of the calcjob files in the remote working directory
+
+    You can specify the relative PATH in the working folder of the CalcJob.
+
+    If PATH is not specified, the default output file path will be used, if defined by the calcjob plugin class.
+    Content can only be shown after the daemon has retrieved the remote files.
+    """
+    import tempfile
+    from shutil import copyfileobj
+    import sys
+    from aiida.common.exceptions import NotExistent
+    remote_folder_linkname = 'remote_folder'  # The `remote_folder` is the standard output of a calculation.
+    breakpoint()
+
+    try:
+        remote_folder = getattr(calcjob.outputs, remote_folder_linkname)
+    except AttributeError:
+        echo.echo_critical(f'No "{remote_folder_linkname}" found. Have the calcjob files been submitted?')
+
+    # Get path from the given CalcJobNode if not defined by user
+    if path is None:
+        path = calcjob.get_option('output_filename')
+
+    # Get path from current process class of CalcJobNode if still not defined
+    if path is None:
+        fname = calcjob.process_class.spec_options.get('output_filename')
+        if fname and fname.has_default():
+            path = fname.default
+
+    if path is None:
+        # Still no path available
+        echo.echo_critical(
+            '"{}" and its process class "{}" do not define a default output file '
+            '(option "output_filename" not found).\n'
+            'Please specify a path explicitly.'.format(calcjob.__class__.__name__, calcjob.process_class.__name__)
+        )
+
+    if save_to is None:
+        fd, temppath = tempfile.mkstemp()
+    else:
+        temppath = save_to
+
+    # Write the file to a temporary folder - the transport interface does not support
+    # directly getting the content of the file....
+    try:
+        remote_folder.getfile(path, temppath)
+    except (OSError, NotExistent):
+        echo.echo_critical(f'"{path}" file in the remote folder is not found. Perhaps the calculation has not started?')
+
+    with open(temppath, 'rb') as fhandle:
+        copyfileobj(fhandle, sys.stdout.buffer)
+
+    if save_to is None:
+        os.close(fd)
+        os.remove(temppath)
+    else:
+        echo.echo_success(f'The remote file has been saved to {save_to}.')
+
+
 @verdi_calcjob.command('outputcat')
 @arguments.CALCULATION('calcjob', type=CalculationParamType(sub_classes=('aiida.node:process.calculation.calcjob',)))
 @click.argument('path', type=click.STRING, required=False)
