@@ -124,23 +124,19 @@ def calcjob_inputcat(calcjob, path):
 @verdi_calcjob.command('remotecat')
 @arguments.CALCULATION('calcjob', type=CalculationParamType(sub_classes=('aiida.node:process.calculation.calcjob',)))
 @click.argument('path', type=click.STRING, required=False)
-@click.option('--save-to', '-s', help='Name of the file to save the remote content to.')
 @decorators.with_dbenv()
-def calcjob_remotecat(calcjob, path, save_to):
+def calcjob_remotecat(calcjob, path):
     """
     Show the contents of one of the calcjob files in the remote working directory
 
     You can specify the relative PATH in the working folder of the CalcJob.
 
-    If PATH is not specified, the default output file path will be used, if defined by the calcjob plugin class.
-    Content can only be shown after the daemon has retrieved the remote files.
+    If PATH is not specified, the default output file path will be used which is defined by the calcjob plugin class.
     """
     import tempfile
-    from shutil import copyfileobj
     import sys
-    from aiida.common.exceptions import NotExistent
+    from shutil import copyfileobj
     remote_folder_linkname = 'remote_folder'  # The `remote_folder` is the standard output of a calculation.
-    breakpoint()
 
     try:
         remote_folder = getattr(calcjob.outputs, remote_folder_linkname)
@@ -165,26 +161,20 @@ def calcjob_remotecat(calcjob, path, save_to):
             'Please specify a path explicitly.'.format(calcjob.__class__.__name__, calcjob.process_class.__name__)
         )
 
-    if save_to is None:
-        fd, temppath = tempfile.mkstemp()
-    else:
-        temppath = save_to
-
-    # Write the file to a temporary folder - the transport interface does not support
-    # directly getting the content of the file....
     try:
-        remote_folder.getfile(path, temppath)
-    except (OSError, NotExistent):
-        echo.echo_critical(f'"{path}" file in the remote folder is not found. Perhaps the calculation has not started?')
+        with tempfile.NamedTemporaryFile(delete=False) as tmpf:
+            tmpf.close()
+            remote_folder.getfile(path, tmpf.name)
+            with open(tmpf.name, encoding='utf8') as fhandle:
+                copyfileobj(fhandle, sys.stdout.buffer)
+    except IOError as err:
+        echo.echo_critical(f'{err.errno}: {str(err)}')
 
-    with open(temppath, 'rb') as fhandle:
-        copyfileobj(fhandle, sys.stdout.buffer)
-
-    if save_to is None:
-        os.close(fd)
-        os.remove(temppath)
-    else:
-        echo.echo_success(f'The remote file has been saved to {save_to}.')
+    try:
+        os.remove(tmpf.name)
+    except OSError:
+        # If you cannot delete, ignore (maybe I didn't manage to create it in the first place
+        pass
 
 
 @verdi_calcjob.command('outputcat')
