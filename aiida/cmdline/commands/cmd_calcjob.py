@@ -136,30 +136,8 @@ def calcjob_remotecat(calcjob, path):
     import tempfile
     import sys
     from shutil import copyfileobj
-    remote_folder_linkname = 'remote_folder'  # The `remote_folder` is the standard output of a calculation.
 
-    try:
-        remote_folder = getattr(calcjob.outputs, remote_folder_linkname)
-    except AttributeError:
-        echo.echo_critical(f'No "{remote_folder_linkname}" found. Have the calcjob files been submitted?')
-
-    # Get path from the given CalcJobNode if not defined by user
-    if path is None:
-        path = calcjob.get_option('output_filename')
-
-    # Get path from current process class of CalcJobNode if still not defined
-    if path is None:
-        fname = calcjob.process_class.spec_options.get('output_filename')
-        if fname and fname.has_default():
-            path = fname.default
-
-    if path is None:
-        # Still no path available
-        echo.echo_critical(
-            '"{}" and its process class "{}" do not define a default output file '
-            '(option "output_filename" not found).\n'
-            'Please specify a path explicitly.'.format(calcjob.__class__.__name__, calcjob.process_class.__name__)
-        )
+    remote_folder, path = get_remote_and_path(calcjob, path)
 
     try:
         with tempfile.NamedTemporaryFile(delete=False) as tmpf:
@@ -175,6 +153,36 @@ def calcjob_remotecat(calcjob, path):
     except OSError:
         # If you cannot delete, ignore (maybe I didn't manage to create it in the first place
         pass
+
+
+@verdi_calcjob.command('remotetail')
+@arguments.CALCULATION('calcjob', type=CalculationParamType(sub_classes=('aiida.node:process.calculation.calcjob',)))
+@click.argument('path', type=click.STRING, required=False)
+@decorators.with_dbenv()
+def calcjob_remotetail(calcjob, path):
+    """
+    Equivalent to a `tail -f` of the remote file
+
+    You can specify the relative PATH in the working folder of the CalcJob.
+
+    If PATH is not specified, the default output file path will be used which is defined by the calcjob plugin class.
+    """
+    from aiida.common.exceptions import NotExistent
+
+    _, path = get_remote_and_path(calcjob, path)
+
+    try:
+        transport = calcjob.get_transport()
+    except NotExistent as exception:
+        echo.echo_critical(repr(exception))
+
+    remote_workdir = calcjob.get_remote_workdir()
+
+    if not remote_workdir:
+        echo.echo_critical('no remote work directory for this calcjob, maybe the daemon did not submit it yet')
+
+    command = get_tailf_command(transport, remote_workdir, path)
+    os.system(command)
 
 
 @verdi_calcjob.command('outputcat')
@@ -328,3 +336,80 @@ def calcjob_cleanworkdir(calcjobs, past_days, older_than, computers, force):
                 counter += 1
 
         echo.echo_success(f'{counter} remote folders cleaned on {computer.label}')
+
+
+def get_tailf_command(transport, remotedir, fname):
+    """
+    Build the commands for doing ``tail -f`` for the given file
+
+    :transport: A opened ``Transport`` object.
+    :remotedir: A remote absolute path of the working directory.
+    :fname: The relative path of the file to be followed.
+
+    :returns: The command to be executed with ``os.system``.
+    """
+    from aiida.common.escaping import escape_for_bash
+    # pylint: disable= protected-access
+    further_params = []
+    if 'username' in transport._connect_args:
+        further_params.append(f"-l {escape_for_bash(transport._connect_args['username'])}")
+
+    if 'port' in transport._connect_args and transport._connect_args['port']:
+        further_params.append(f"-p {transport._connect_args['port']}")
+
+    if 'key_filename' in transport._connect_args and transport._connect_args['key_filename']:
+        further_params.append(f"-i {escape_for_bash(transport._connect_args['key_filename'])}")
+
+    further_params_str = ' '.join(further_params)
+
+    connect_string = (
+        """ "if [ -d {escaped_remotedir} ] ;"""
+        """ then cd {escaped_remotedir} ; {bash_command} -c 'tail -f {fname}' ; else echo '  ** The directory' ; """
+        """echo '  ** {remotedir}' ; echo '  ** seems to have been deleted, I logout...' ; fi" """.format(
+            bash_command=transport._bash_command_str,
+            escaped_remotedir="'{}'".format(remotedir),
+            remotedir=remotedir,
+            fname=fname
+        )
+    )
+
+    cmd = f'ssh -t {transport._machine} {further_params_str} {connect_string}'
+    return cmd
+
+
+def get_remote_and_path(calcjob, path=None):
+    """
+    Get the RemoteFolder and process the path argument
+
+    :param calcjob: The ``CalcJobNode`` whose remote_folder to be returned.
+    :param path: The relative path of file. The default from the spec will be used if it is not defined.
+
+    :returns: A tuple of the ``RemoteData`` and the path of the output file to be used.
+    """
+
+    remote_folder_linkname = 'remote_folder'  # The `remote_folder` is the standard output of a calculation.
+
+    try:
+        remote_folder = getattr(calcjob.outputs, remote_folder_linkname)
+    except AttributeError:
+        echo.echo_critical(f'No "{remote_folder_linkname}" found. Have the calcjob files been submitted?')
+
+    # Get path from the given CalcJobNode if not defined by user
+    if path is None:
+        path = calcjob.get_option('output_filename')
+
+    # Get path from current process class spec of CalcJobNode if still not defined
+    if path is None:
+        fname = calcjob.process_class.spec_options.get('output_filename')
+        if fname and fname.has_default():
+            path = fname.default
+
+    if path is None:
+        # Still no path available?
+        echo.echo_critical(
+            '"{}" and its process class "{}" do not define a default output file '
+            '(option "output_filename" not found).\n'
+            'Please specify a path explicitly.'.format(calcjob.__class__.__name__, calcjob.process_class.__name__)
+        )
+
+    return remote_folder, path
