@@ -10,7 +10,8 @@
 # pylint: disable=protected-access,too-many-locals,invalid-name,too-many-public-methods
 """Tests for `verdi calcjob`."""
 import io
-
+from pathlib import Path
+from tempfile import mkdtemp
 from click.testing import CliRunner
 
 from aiida import orm
@@ -57,10 +58,21 @@ class TestVerdiCalculation(AiidaTestCase):
 
             calc = orm.CalcJobNode(computer=cls.computer, process_type=process_type)
             calc.set_option('resources', {'num_machines': 1, 'num_mpiprocs_per_machine': 1})
+            calc.set_option('output_filename', 'fileA.txt')
             calc.store()
 
             calc.set_process_state(ProcessState.RUNNING)
             cls.calcs.append(calc)
+
+            # Add RemoteData node
+            remote = orm.RemoteData()
+            path = mkdtemp()
+            remote.set_remote_path(path)
+            (Path(path) / 'fileA.txt').write_text('test stringA')
+            (Path(path) / 'fileB.txt').write_text('test stringB')
+            remote.computer = cls.computer
+            remote.add_incoming(calc, LinkType.CREATE, 'remote_folder')
+            remote.store()
 
             if calculation_state == CalcJobState.PARSING:
                 cls.KEY_ONE = 'key_one'
@@ -296,3 +308,22 @@ class TestVerdiCalculation(AiidaTestCase):
         self.assertIsNone(result.exception, result.output)
         self.assertEqual(len(get_result_lines(result)), 1)
         self.assertEqual(get_result_lines(result)[0], '5')
+
+    def test_calcjob_remotecat(self):
+        """Test the remotecat command that prints the remote file for a given calcjob"""
+        # Specifying no filtering options and no explicit calcjobs should exit with non-zero status
+        options = []
+        result = self.cli_runner.invoke(command.calcjob_remotecat, options)
+        self.assertIsNotNone(result.exception)
+
+        options = [str(self.result_job.uuid), 'fileB.txt']
+        result = self.cli_runner.invoke(command.calcjob_remotecat, options)
+        self.assertEqual(result.stdout, 'test stringB')
+
+        options = [str(self.result_job.uuid)]
+        result = self.cli_runner.invoke(command.calcjob_remotecat, options)
+        self.assertEqual(result.stdout, 'test stringA')
+
+        options = [str(self.result_job.uuid), 'fileA.txt']
+        result = self.cli_runner.invoke(command.calcjob_remotecat, options)
+        self.assertEqual(result.stdout, 'test stringA')

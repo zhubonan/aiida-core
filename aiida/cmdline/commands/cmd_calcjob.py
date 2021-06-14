@@ -162,7 +162,7 @@ def calcjob_remotecat(calcjob, path, monitor):
         with tempfile.NamedTemporaryFile(delete=False) as tmpf:
             tmpf.close()
             remote_folder.getfile(path, tmpf.name)
-            with open(tmpf.name, encoding='utf8') as fhandle:
+            with open(tmpf.name, 'rb') as fhandle:
                 copyfileobj(fhandle, sys.stdout.buffer)
     except IOError as err:
         echo.echo_critical(f'{err.errno}: {str(err)}')
