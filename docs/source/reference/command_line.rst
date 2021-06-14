@@ -53,7 +53,6 @@ Below is a list with all available subcommands.
       outputcat     Show the contents of one of the calcjob retrieved outputs.
       outputls      Show the list of the retrieved calcjob output files.
       remotecat     Show the contents of one of the calcjob files in the remote working...
-      remotetail    Equivalent to a `tail -f` of the remote file You can specify the...
       res           Print data from the result output Dict node of a calcjob.
 
 

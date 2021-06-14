@@ -124,8 +124,9 @@ def calcjob_inputcat(calcjob, path):
 @verdi_calcjob.command('remotecat')
 @arguments.CALCULATION('calcjob', type=CalculationParamType(sub_classes=('aiida.node:process.calculation.calcjob',)))
 @click.argument('path', type=click.STRING, required=False)
+@click.option('--monitor', is_flag=True, default=False, help='Monitor the file using `tail -f` instead.')
 @decorators.with_dbenv()
-def calcjob_remotecat(calcjob, path):
+def calcjob_remotecat(calcjob, path, monitor):
     """
     Show the contents of one of the calcjob files in the remote working directory
 
@@ -136,6 +137,24 @@ def calcjob_remotecat(calcjob, path):
     import tempfile
     import sys
     from shutil import copyfileobj
+    from aiida.common.exceptions import NotExistent
+
+    if monitor:
+        _, path = get_remote_and_path(calcjob, path)
+
+        try:
+            transport = calcjob.get_transport()
+        except NotExistent as exception:
+            echo.echo_critical(repr(exception))
+
+        remote_workdir = calcjob.get_remote_workdir()
+
+        if not remote_workdir:
+            echo.echo_critical('no remote work directory for this calcjob, maybe the daemon did not submit it yet')
+
+        command = get_tailf_command(transport, remote_workdir, path)
+        os.system(command)
+        return
 
     remote_folder, path = get_remote_and_path(calcjob, path)
 
@@ -153,36 +172,6 @@ def calcjob_remotecat(calcjob, path):
     except OSError:
         # If you cannot delete, ignore (maybe I didn't manage to create it in the first place
         pass
-
-
-@verdi_calcjob.command('remotetail')
-@arguments.CALCULATION('calcjob', type=CalculationParamType(sub_classes=('aiida.node:process.calculation.calcjob',)))
-@click.argument('path', type=click.STRING, required=False)
-@decorators.with_dbenv()
-def calcjob_remotetail(calcjob, path):
-    """
-    Equivalent to a `tail -f` of the remote file
-
-    You can specify the relative PATH in the working folder of the CalcJob.
-
-    If PATH is not specified, the default output file path will be used which is defined by the calcjob plugin class.
-    """
-    from aiida.common.exceptions import NotExistent
-
-    _, path = get_remote_and_path(calcjob, path)
-
-    try:
-        transport = calcjob.get_transport()
-    except NotExistent as exception:
-        echo.echo_critical(repr(exception))
-
-    remote_workdir = calcjob.get_remote_workdir()
-
-    if not remote_workdir:
-        echo.echo_critical('no remote work directory for this calcjob, maybe the daemon did not submit it yet')
-
-    command = get_tailf_command(transport, remote_workdir, path)
-    os.system(command)
 
 
 @verdi_calcjob.command('outputcat')
