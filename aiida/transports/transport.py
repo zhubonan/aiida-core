@@ -680,7 +680,7 @@ class Transport(abc.ABC):
         """
         raise NotImplementedError
 
-    def gotocomputer_command(self, remotedir):
+    def gotocomputer_command(self, remotedir, extra_args=''):
         """
         Return a string to be run using os.system in order to connect
         via the transport to the remote directory.
@@ -692,6 +692,7 @@ class Transport(abc.ABC):
         * A reasonable error message is produced if the folder does not exist
 
         :param str remotedir: the full path of the remote directory
+        :param str extra_args: the extra arguments to be passed to the shell
         """
         raise NotImplementedError
 
@@ -808,13 +809,16 @@ class Transport(abc.ABC):
     def has_magic(self, string):
         return self._MAGIC_CHECK.search(string) is not None
 
-    def _gotocomputer_string(self, remotedir):
+    def _gotocomputer_string(self, remotedir, extra_args=''):
         """command executed when goto computer."""
         connect_string = (
             """ "if [ -d {escaped_remotedir} ] ;"""
-            """ then cd {escaped_remotedir} ; {bash_command} ; else echo '  ** The directory' ; """
+            """ then cd {escaped_remotedir} ; {bash_command} {extra_args}; else echo '  ** The directory' ; """
             """echo '  ** {remotedir}' ; echo '  ** seems to have been deleted, I logout...' ; fi" """.format(
-                bash_command=self._bash_command_str, escaped_remotedir="'{}'".format(remotedir), remotedir=remotedir
+                bash_command=self._bash_command_str,
+                extra_args=extra_args,
+                escaped_remotedir="'{}'".format(remotedir),
+                remotedir=remotedir
             )
         )
 

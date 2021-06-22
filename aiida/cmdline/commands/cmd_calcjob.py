@@ -151,8 +151,8 @@ def calcjob_remotecat(calcjob, path, monitor):
 
         if not remote_workdir:
             echo.echo_critical('no remote work directory for this calcjob, maybe the daemon did not submit it yet')
-
-        command = get_tailf_command(transport, remote_workdir, path)
+        cmds = f"-c 'tail -f {path}'"
+        command = transport.gotocomputer_command(remote_workdir, cmds)
         os.system(command)
         return
 
@@ -325,45 +325,6 @@ def calcjob_cleanworkdir(calcjobs, past_days, older_than, computers, force):
                 counter += 1
 
         echo.echo_success(f'{counter} remote folders cleaned on {computer.label}')
-
-
-def get_tailf_command(transport, remotedir, fname):
-    """
-    Build the commands for doing ``tail -f`` for the given file
-
-    :transport: A opened ``Transport`` object.
-    :remotedir: A remote absolute path of the working directory.
-    :fname: The relative path of the file to be followed.
-
-    :returns: The command to be executed with ``os.system``.
-    """
-    from aiida.common.escaping import escape_for_bash
-    # pylint: disable= protected-access
-    further_params = []
-    if 'username' in transport._connect_args:
-        further_params.append(f"-l {escape_for_bash(transport._connect_args['username'])}")
-
-    if 'port' in transport._connect_args and transport._connect_args['port']:
-        further_params.append(f"-p {transport._connect_args['port']}")
-
-    if 'key_filename' in transport._connect_args and transport._connect_args['key_filename']:
-        further_params.append(f"-i {escape_for_bash(transport._connect_args['key_filename'])}")
-
-    further_params_str = ' '.join(further_params)
-
-    connect_string = (
-        """ "if [ -d {escaped_remotedir} ] ;"""
-        """ then cd {escaped_remotedir} ; {bash_command} -c 'tail -f {fname}' ; else echo '  ** The directory' ; """
-        """echo '  ** {remotedir}' ; echo '  ** seems to have been deleted, I logout...' ; fi" """.format(
-            bash_command=transport._bash_command_str,
-            escaped_remotedir="'{}'".format(remotedir),
-            remotedir=remotedir,
-            fname=fname
-        )
-    )
-
-    cmd = f'ssh -t {transport._machine} {further_params_str} {connect_string}'
-    return cmd
 
 
 def get_remote_and_path(calcjob, path=None):

@@ -74,3 +74,12 @@ def test_gotocomputer():
             """echo '  ** /remote_dir/' ; echo '  ** seems to have been deleted, I logout...' ; fi" """
         )
         assert cmd_str == expected_str
+
+        cmd_str = transport.gotocomputer_command('/remote_dir/', '-c "echo Hello World"')
+
+        expected_str = (
+            """ssh -t localhost -o ProxyCommand='ssh -W localhost:22 localhost'  "if [ -d '/remote_dir/' ] ;"""
+            """ then cd '/remote_dir/' ; bash  -c "echo Hello World"; else echo '  ** The directory' ; """
+            """echo '  ** /remote_dir/' ; echo '  ** seems to have been deleted, I logout...' ; fi" """
+        )
+        assert cmd_str == expected_str
