@@ -316,6 +316,11 @@ class TestVerdiCalculation(AiidaTestCase):
         result = self.cli_runner.invoke(command.calcjob_remotecat, options)
         self.assertIsNotNone(result.exception)
 
+        # This should be the failed calc without remote data - exception raised
+        options = [str(self.calcs[-1].uuid), 'fileB.txt']
+        result = self.cli_runner.invoke(command.calcjob_remotecat, options)
+        self.assertIsNotNone(result.exception)
+
         options = [str(self.result_job.uuid), 'fileB.txt']
         result = self.cli_runner.invoke(command.calcjob_remotecat, options)
         self.assertEqual(result.stdout, 'test stringB')
