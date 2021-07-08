@@ -165,6 +165,7 @@
             "folder = aiida.orm.nodes.data.folder:FolderData",
             "int = aiida.orm.nodes.data.int:Int",
             "list = aiida.orm.nodes.data.list:List",
+            "msonable = aiida.orm.nodes.data.msonable:MsonableData",
             "numeric = aiida.orm.nodes.data.numeric:NumericType",
             "orbital = aiida.orm.nodes.data.orbital:OrbitalData",
             "remote = aiida.orm.nodes.data.remote.base:RemoteData",
