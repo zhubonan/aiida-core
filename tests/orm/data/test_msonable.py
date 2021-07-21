@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """Tests for the :class:`aiida.orm.nodes.data.msonable.MsonableData` data type."""
+import datetime
+import math
+
 from monty.json import MSONable
+import numpy
 import pymatgen
 import pytest
 
@@ -31,7 +35,7 @@ class MsonableClass(MSONable):
     @classmethod
     def from_dict(cls, d):
         """Reconstruct an instance from a serialized version."""
-        return cls(d['data'])
+        return cls(**d)
 
 
 def test_construct():
@@ -104,7 +108,7 @@ def test_load():
 @pytest.mark.usefixtures('clear_database_before_test')
 def test_obj():
     """Test the ``MsonableData.obj`` property."""
-    data = {'a': 1}
+    data = [1, float('inf'), float('-inf'), float('nan'), numpy.arange(10), datetime.datetime.now()]
     obj = MsonableClass(data)
     node = MsonableData(obj)
     node.store()
@@ -114,7 +118,19 @@ def test_obj():
 
     loaded = load_node(node.pk)
     assert isinstance(node.obj, MsonableClass)
-    assert loaded.obj.data == data
+
+    for left, right in zip(loaded.obj.data, data):
+
+        # Need this explicit case to compare NaN because of the peculiarity in Python where ``float(nan) != float(nan)``
+        if isinstance(left, float) and math.isnan(left):
+            assert math.isnan(right)
+            continue
+
+        try:
+            # This is needed to match numpy arrays
+            assert (left == right).all()
+        except AttributeError:
+            assert left == right
 
 
 @pytest.mark.usefixtures('clear_database_before_test')
