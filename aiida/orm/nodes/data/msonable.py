@@ -3,8 +3,6 @@
 import importlib
 import json
 
-from monty.json import MSONable, MontyDecoder, MontyEncoder
-
 from aiida.orm import Data
 
 
@@ -35,9 +33,6 @@ class MsonableData(Data):
         if obj is None:
             raise TypeError('the `obj` argument cannot be `None`.')
 
-        if not isinstance(obj, MSONable):
-            raise TypeError('the `obj` argument needs to implement the ``MSONable`` class.')
-
         for method in ['as_dict', 'from_dict']:
             if not hasattr(obj, method) or not callable(getattr(obj, method)):
                 raise TypeError(f'the `obj` argument does not have the required `{method}` method.')
@@ -46,10 +41,11 @@ class MsonableData(Data):
 
         self._obj = obj
 
-        # Serialize the object by calling ``as_dict`` and performing a roundtrip through JSON encoding using the
-        # ``MontyEncode`` for the encoding to string part. This is necessary to recursively serialize objects that can
-        # not be written to JSON, such as ``datetime`` objects and ``numpy`` arrays.
-        serialized = json.loads(json.dumps(obj.as_dict(), cls=MontyEncoder), parse_constant=lambda x: x)
+        # Serialize the object by calling ``as_dict`` and performing a roundtrip through JSON encoding.
+        # This relies on obj.as_dict() giving JSON serializable outputs. The round trip is necessary for
+        # constants NaN, inf, -inf which are serialised (by JSONEncoder) as plain strings and kept during
+        # the deserialization.
+        serialized = json.loads(json.dumps(obj.as_dict()), parse_constant=lambda x: x)
 
         # Then we apply our own custom serializer that serializes the float constants infinity and nan to a string value
         # which is necessary because the serializer of the ``json`` standard module deserializes to the Python values
@@ -113,10 +109,6 @@ class MsonableData(Data):
             # no longer be recognized by ``json.loads`` as the Javascript notation of the float constants and so it will
             # leave them as separate strings.
             deserialized = self._deserialize_float_constants(attributes)
-
-            # As a second step, we perform a JSON-serialization roundtrip using the ``MontyDecoder`` for deserialization
-            # which is necessary to recursively deserialize objects such as ``datetime`` and ``numpy`` arrays.
-            deserialized = json.loads(json.dumps(deserialized), cls=MontyDecoder)
 
             # Finally, reconstruct the original ``MSONable`` class from the fully deserialized data.
             self._obj = cls.from_dict(deserialized)
